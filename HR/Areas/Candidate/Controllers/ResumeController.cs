@@ -2,16 +2,17 @@
 using HR.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace HR.Controllers
+namespace HR.Areas.Candidate.Controllers
 {
-    public class CandidateController : Controller
+    [Area("Candidate")]
+    public class ResumeController : Controller
     {
         private const long MaxFileSizeBytes = 10 * 1024 * 1024;
         private const string PdfContentType = "application/pdf";
 
         private readonly S3Service _s3Service;
 
-        public CandidateController(S3Service s3Service)
+        public ResumeController(S3Service s3Service)
         {
             _s3Service = s3Service;
         }
@@ -36,7 +37,7 @@ namespace HR.Controllers
 
             if (file == null || file.Length == 0)
             {
-                TempData["UploadError"] = "Оберіть файл резюме у форматі PDF або TXT.";
+                TempData["UploadError"] = "Оберіть файл резюме у форматі PDF.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -46,15 +47,18 @@ namespace HR.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var extension = Path.GetExtension(file.FileName);
+            var hasPdfExtension = Path.GetExtension(file.FileName)
+                .Equals(".pdf", StringComparison.OrdinalIgnoreCase);
 
-            var isPdf = extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(file.ContentType, PdfContentType, StringComparison.OrdinalIgnoreCase);
-            var isTxt = extension.Equals(".txt", StringComparison.OrdinalIgnoreCase);
+            var hasPdfContentType = string.Equals(
+                file.ContentType,
+                PdfContentType,
+                StringComparison.OrdinalIgnoreCase
+            );
 
-            if (!isPdf && !isTxt)
+            if (!hasPdfExtension || !hasPdfContentType)
             {
-                TempData["UploadError"] = "Резюме повинно бути файлом у форматі PDF або TXT.";
+                TempData["UploadError"] = "Резюме повинно бути файлом у форматі PDF.";
                 return RedirectToAction(nameof(Index));
             }
 

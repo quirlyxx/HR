@@ -2,6 +2,7 @@
 using Amazon.S3;
 using Amazon.S3.Model;
 using System.Text;
+using System.Text.Json;
 
 namespace HR.Services
 {
@@ -76,6 +77,8 @@ namespace HR.Services
             }
         }
         private const string ResumesPrefix = "resumes/";
+        // Сюди Lambda кладе результат аналізу Gemini: analysis/<id резюме>.txt
+        private const string AnalysisPrefix = "analysis/";
 
         private const string MetaCandidateName = "candidate-name";
         private const string MetaContactInfo = "contact-info";
@@ -86,7 +89,8 @@ namespace HR.Services
             string contactInfo,
             string originalFileName)
         {
-            var key = $"{ResumesPrefix}{Guid.NewGuid():N}.pdf";
+            var isTxt = Path.GetExtension(originalFileName).Equals(".txt", StringComparison.OrdinalIgnoreCase);
+            var key = $"{ResumesPrefix}{Guid.NewGuid():N}{(isTxt ? ".txt" : ".pdf")}";
 
             var request = new PutObjectRequest
             {
@@ -94,7 +98,7 @@ namespace HR.Services
                 Key = key,
                 InputStream = resumeStream,
                 AutoCloseStream = false,
-                ContentType = "application/pdf"
+                ContentType = isTxt ? "text/plain; charset=utf-8" : "application/pdf"
             };
 
             request.Metadata.Add(MetaCandidateName, Uri.EscapeDataString(candidateName));
@@ -118,6 +122,7 @@ namespace HR.Services
             );
 
             var s3Objects = listResponse?.S3Objects ?? new List<S3Object>();
+            var analysisKeys = await ListAnalysisKeysAsync();
 
             foreach (var obj in s3Objects)
             {
@@ -137,6 +142,8 @@ namespace HR.Services
                         metadataResponse.Metadata[MetaOriginalFileName]
                     );
 
+                    var analysisKey = AnalysisKeyFor(obj.Key);
+
                     result.Add(new ResumeInfo
                     {
                         Key = obj.Key,
@@ -150,7 +157,10 @@ namespace HR.Services
                             ? Path.GetFileName(obj.Key)
                             : originalFileName,
                         UploadedAtUtc = obj.LastModified?.ToUniversalTime() ?? DateTime.MinValue,
-                        SizeBytes = obj.Size ?? 0
+                        SizeBytes = obj.Size ?? 0,
+                        Analysis = analysisKeys.Contains(analysisKey)
+                            ? await GetAnalysisAsync(analysisKey)
+                            : null
                     });
                 }
                 catch (Exception ex)
@@ -165,6 +175,8 @@ namespace HR.Services
         }
         public async Task<string> GetResumePresignedUrlAsync(string key, TimeSpan validFor)
         {
+            EnsureResumeKey(key);
+
             var request = new GetPreSignedUrlRequest
             {
                 BucketName = _bucketName,
@@ -175,7 +187,115 @@ namespace HR.Services
 
             return await _s3Client.GetPreSignedURLAsync(request);
         }
-        public Task DeleteResumeAsync(string key) => DeleteAsync(key);
+        public async Task DeleteResumeAsync(string key)
+        {
+            EnsureResumeKey(key);
+
+            await DeleteAsync(key);
+            // S3 не повертає помилку, якщо аналізу ще немає
+            await DeleteAsync(AnalysisKeyFor(key));
+        }
+
+        public async Task<ResumeInfo?> GetResumeAsync(string key)
+        {
+            EnsureResumeKey(key);
+            return (await ListResumesAsync()).FirstOrDefault(r => r.Key == key);
+        }
+
+        private static void EnsureResumeKey(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key) || !key.StartsWith(ResumesPrefix))
+            {
+                throw new ArgumentException("Некоректний ключ резюме.");
+            }
+        }
+
+        // resumes/abc.pdf -> analysis/abc.txt
+        private static string AnalysisKeyFor(string resumeKey) =>
+    $"{AnalysisPrefix}{Path.GetFileNameWithoutExtension(resumeKey)}.json";
+
+        private async Task<HashSet<string>> ListAnalysisKeysAsync()
+        {
+            var response = await _s3Client.ListObjectsV2Async(
+                new ListObjectsV2Request
+                {
+                    BucketName = _bucketName,
+                    Prefix = AnalysisPrefix
+                }
+            );
+
+            return (response?.S3Objects ?? new List<S3Object>())
+                .Select(o => o.Key)
+                .ToHashSet();
+        }
+
+        private async Task<ResumeAnalysis?> GetAnalysisAsync(string analysisKey)
+        {
+            try
+            {
+                using var response = await _s3Client.GetObjectAsync(_bucketName, analysisKey);
+                using var reader = new StreamReader(response.ResponseStream, Encoding.UTF8);
+                var text = await reader.ReadToEndAsync();
+
+                try
+                {
+                    using var doc = JsonDocument.Parse(text);
+                    var root = doc.RootElement;
+
+                    var skills = new List<string>();
+                    if (root.TryGetProperty("skills", out var skillsEl) &&
+                        skillsEl.ValueKind == JsonValueKind.Array)
+                    {
+                        skills = skillsEl.EnumerateArray()
+                            .Select(x => x.ToString())
+                            .Where(x => !string.IsNullOrWhiteSpace(x))
+                            .ToList();
+                    }
+
+                    return new ResumeAnalysis
+                    {
+                        CandidateName = $"{ReadString(root, "candidateName")} {ReadString(root, "candidateSurname")}".Trim(),
+                        BirthDate = ReadString(root, "candidateBirthDate"),
+                        MatchPercentage = ReadPercent(root, "candidateMatchPercentage"),
+                        Experience = ReadString(root, "candidateExperience"),
+                        Description = ReadString(root, "candidateDescription"),
+                        Skills = skills
+                    };
+                }
+                catch (JsonException)
+                {
+                    // Gemini повернула не JSON — покажемо як є
+                    return new ResumeAnalysis { Description = text };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex);
+                return null;
+            }
+        }
+
+        private static string ReadString(JsonElement root, string name) =>
+            root.TryGetProperty(name, out var value) ? value.ToString() : string.Empty;
+
+        private static int? ReadPercent(JsonElement root, string name)
+        {
+            if (!root.TryGetProperty(name, out var value))
+            {
+                return null;
+            }
+
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number))
+            {
+                return (int)Math.Round(number);
+            }
+
+            var text = value.ToString().Trim().TrimEnd('%');
+            return double.TryParse(text, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                ? (int)Math.Round(parsed)
+                : null;
+        }
 
         private static string DecodeMetadata(string? value)
         {
@@ -202,5 +322,18 @@ namespace HR.Services
         public string OriginalFileName { get; set; } = string.Empty;
         public DateTime UploadedAtUtc { get; set; }
         public long SizeBytes { get; set; }
+
+        // null = Lambda ще не встигла проаналізувати резюме
+        public ResumeAnalysis? Analysis { get; set; }
+    }
+
+    public class ResumeAnalysis
+    {
+        public string CandidateName { get; set; } = string.Empty;
+        public string BirthDate { get; set; } = string.Empty;
+        public int? MatchPercentage { get; set; }
+        public string Experience { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public List<string> Skills { get; set; } = new();
     }
 }

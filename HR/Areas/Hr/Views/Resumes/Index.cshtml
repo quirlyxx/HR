@@ -554,7 +554,7 @@
 <body>
 
     @{ ViewData["Active"] = "resumes"; }
-    @await Html.PartialAsync("_TopNav")
+    @await Html.PartialAsync("_Nav")
 
     <div class="page">
 
@@ -625,6 +625,7 @@
 
                             <div class="resume-actions">
                                 <a class="btn-open"
+                                   asp-area="Hr"
                                    asp-controller="Resumes"
                                    asp-action="Open"
                                    asp-route-key="@resume.Key"
@@ -633,7 +634,8 @@
                                     Відкрити
                                 </a>
 
-                                <form asp-controller="Resumes"
+                                <form asp-area="Hr"
+                                   asp-controller="Resumes"
                                       asp-action="Delete"
                                       method="post"
                                       onsubmit="return confirm('Видалити резюме цього кандидата?');">

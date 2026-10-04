@@ -37,6 +37,11 @@ builder.Services.AddSingleton<S3Service>(sp =>
     );
 });
 
+builder.Services.AddSingleton(new GeminiService(
+    builder.Configuration["Gemini:ApiKey"] ?? "",
+    builder.Configuration["Gemini:Model"] ?? "gemini-3.8-flash"
+));
+
 var app = builder.Build();
 
 // HTTP pipeline

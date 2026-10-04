@@ -1,0 +1,161 @@
+@model HR.Models.AnalysisViewModel
+@{
+    Layout = null;
+    var r = Model.Result;
+    var pct = r?.MatchPercentage ?? 0;
+    var level = pct >= 70 ? "high" : pct >= 40 ? "mid" : "low";
+    var verdict = pct >= 70 ? "Підходить" : pct >= 40 ? "Частково підходить" : "Не підходить";
+}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Аналіз резюме · HR Board</title>
+    <style>
+        :root { --bg:#F5F7FB; --card:#fff; --ink:#1B2430; --muted:#6B7686; --line:#E3E8F0;
+                --accent:#2F6FEB; --high:#1F9D63; --mid:#D98A00; --low:#D64545; }
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:"Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--ink); line-height:1.5; }
+        nav { background:var(--card); border-bottom:1px solid var(--line); padding:0 24px; display:flex; align-items:center; gap:28px; height:60px; }
+        .brand { font-weight:700; font-size:1.1rem; color:var(--ink); text-decoration:none; }
+        nav .links { display:flex; gap:6px; }
+        nav .links a { color:var(--muted); text-decoration:none; padding:8px 14px; border-radius:8px; font-size:.95rem; }
+        nav .links a:hover { background:var(--bg); }
+        nav .links a.active { background:#E8F0FE; color:var(--accent); font-weight:600; }
+        main { max-width:1080px; margin:0 auto; padding:32px 20px 64px; }
+        h1 { margin:0 0 6px; font-size:1.7rem; }
+        .lead { color:var(--muted); margin:0 0 20px; }
+        .steps { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:24px; }
+        .steps span { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:6px 14px; font-size:.88rem; color:var(--muted); }
+        .steps b { color:var(--accent); }
+        .cols { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+        .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+        .card h2 { margin:0 0 4px; font-size:1.1rem; }
+        .hint { color:var(--muted); font-size:.88rem; margin:0 0 12px; }
+        .tools { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+        .btn-file { display:inline-block; cursor:pointer; border:1px dashed var(--accent); color:var(--accent); background:#F3F7FF; padding:8px 14px; border-radius:8px; font-size:.9rem; font-weight:600; }
+        .btn-file:hover { background:#E8F0FE; }
+        .fname { color:var(--muted); font-size:.85rem; }
+        textarea { width:100%; min-height:280px; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:12px; font:inherit; font-size:.92rem; }
+        textarea:focus { outline:2px solid #BFD4FB; border-color:var(--accent); }
+        .actions { margin:24px 0; text-align:center; }
+        .btn-main { background:var(--accent); color:#fff; border:0; border-radius:12px; padding:14px 34px; font-size:1.05rem; font-weight:600; cursor:pointer; }
+        .btn-main:hover { background:#2459C4; }
+        .btn-main:disabled { background:#9DB8F2; cursor:wait; }
+        .error { background:#FDECEC; color:#9B2C2C; border:1px solid #F5C2C2; border-radius:10px; padding:12px 16px; margin-bottom:20px; }
+        .result { margin-top:8px; }
+        .score { display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin-bottom:16px; }
+        .pct { font-size:3rem; font-weight:700; line-height:1; }
+        .pct.high, .badge.high { color:var(--high); } .pct.mid, .badge.mid { color:var(--mid); } .pct.low, .badge.low { color:var(--low); }
+        .badge { font-weight:700; font-size:1.05rem; }
+        .bar { flex:1; min-width:200px; height:12px; background:var(--line); border-radius:999px; overflow:hidden; }
+        .bar i { display:block; height:100%; border-radius:999px; }
+        .bar i.high { background:var(--high); } .bar i.mid { background:var(--mid); } .bar i.low { background:var(--low); }
+        .label { color:var(--muted); font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; margin:16px 0 6px; }
+        .chips { display:flex; flex-wrap:wrap; gap:8px; }
+        .chips span { background:#E8F0FE; color:var(--accent); border-radius:999px; padding:4px 12px; font-size:.85rem; }
+        @@media (max-width:800px) { .cols { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+<nav>
+    <a class="brand" href="/">HR Board</a>
+    <div class="links">
+        <a href="/">Вакансія</a>
+        <a href="/Candidate">Кандидату</a>
+        <a href="/Resumes">Резюме (HR)</a>
+        <a class="active" href="/Analysis">Аналіз</a>
+    </div>
+</nav>
+<main>
+    <h1>Аналіз резюме з Gemini</h1>
+    <p class="lead">Порівняйте резюме з вакансією й отримайте оцінку відповідності.</p>
+    <div class="steps"><span><b>1</b> Додайте вакансію</span><span><b>2</b> Додайте резюме</span><span><b>3</b> Натисніть «Проаналізувати»</span></div>
+
+    @if (!string.IsNullOrEmpty(Model.Error))
+    {
+        <div class="error">@Model.Error</div>
+    }
+
+    <form asp-controller="Analysis" asp-action="Index" method="post" id="form">
+        <div class="cols">
+            <div class="card">
+                <h2>1. Вакансія</h2>
+                <p class="hint">Вставте текст або завантажте .txt файл.</p>
+                <div class="tools">
+                    <label class="btn-file" for="vfile">📄 Завантажити .txt</label>
+                    <input type="file" id="vfile" accept=".txt,text/plain" hidden />
+                    <span class="fname" id="vname"></span>
+                </div>
+                <textarea asp-for="Vacancy" placeholder="Назва вакансії та вимоги..."></textarea>
+            </div>
+            <div class="card">
+                <h2>2. Резюме</h2>
+                <p class="hint">Вставте текст або завантажте .txt файл.</p>
+                <div class="tools">
+                    <label class="btn-file" for="rfile">📄 Завантажити .txt</label>
+                    <input type="file" id="rfile" accept=".txt,text/plain" hidden />
+                    <span class="fname" id="rname"></span>
+                </div>
+                <textarea asp-for="Resume" placeholder="Текст резюме кандидата..."></textarea>
+            </div>
+        </div>
+        <div class="actions">
+            <button type="submit" class="btn-main" id="go">✨ Проаналізувати з Gemini</button>
+        </div>
+    </form>
+
+    @if (r != null)
+    {
+        <div class="card result">
+            <h2>@(string.IsNullOrWhiteSpace(r.CandidateName) ? "Результат аналізу" : r.CandidateName)</h2>
+            @if (r.MatchPercentage != null)
+            {
+                <div class="score">
+                    <div class="pct @level">@(pct)%</div>
+                    <div class="badge @level">@verdict</div>
+                    <div class="bar"><i class="@level" style="width:@(pct)%"></i></div>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(r.Experience))
+            {
+                <div class="label">Досвід</div>
+                <div>@r.Experience</div>
+            }
+            @if (r.Skills.Count > 0)
+            {
+                <div class="label">Навички</div>
+                <div class="chips">@foreach (var skill in r.Skills) { <span>@skill</span> }</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(r.Description))
+            {
+                <div class="label">Висновок</div>
+                <div>@r.Description</div>
+            }
+        </div>
+    }
+</main>
+<script>
+    function bindFile(inputId, areaId, nameId) {
+        document.getElementById(inputId).addEventListener('change', function (e) {
+            var f = e.target.files[0];
+            if (!f) return;
+            var reader = new FileReader();
+            reader.onload = function () {
+                document.getElementById(areaId).value = reader.result;
+                document.getElementById(nameId).textContent = f.name;
+            };
+            reader.readAsText(f);
+        });
+    }
+    bindFile('vfile', 'Vacancy', 'vname');
+    bindFile('rfile', 'Resume', 'rname');
+    document.getElementById('form').addEventListener('submit', function () {
+        var b = document.getElementById('go');
+        b.disabled = true;
+        b.textContent = 'Аналізую… зачекайте кілька секунд';
+    });
+</script>
+</body>
+</html>

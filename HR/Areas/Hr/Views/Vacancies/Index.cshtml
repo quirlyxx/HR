@@ -460,19 +460,13 @@
                     transition: none;
                 }
             }
-    
-        .txt-load { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .txt-btn { cursor: pointer; border: 1px dashed var(--muted); border-radius: 6px; padding: 7px 14px;
-                   font-size: 0.88rem; font-weight: 500; background: var(--paper); color: var(--text); }
-        .txt-btn:hover { background: #F4EEDD; }
-        .txt-name { color: var(--muted); font-size: 0.85rem; }
     </style>
 </head>
 
 <body>
 
     @{ ViewData["Active"] = "vacancy"; }
-    @await Html.PartialAsync("_TopNav")
+    @await Html.PartialAsync("_Nav")
 
     <div class="page">
 
@@ -503,8 +497,9 @@
                 можна просто скопіювати з готового опису.
             </p>
 
-            <form asp-controller="Home"
-                  asp-action="SaveRequirements"
+            <form asp-area="Hr"
+                  asp-controller="Vacancies"
+                  asp-action="Save"
                   method="post"
                   id="requirementsForm">
 
@@ -527,12 +522,6 @@
 
                     <h2>Вимоги</h2>
 
-                </div>
-
-                <div class="txt-load">
-                    <label class="txt-btn" for="reqFile">📄 Завантажити з .txt</label>
-                    <input type="file" id="reqFile" accept=".txt,text/plain" hidden />
-                    <span class="txt-name" id="reqFileName"></span>
                 </div>
 
                 <textarea name="requirementsText"
@@ -577,17 +566,5 @@
             });
     </script>
 
-    <script>
-        document.getElementById('reqFile').addEventListener('change', function (e) {
-            var f = e.target.files[0];
-            if (!f) return;
-            var reader = new FileReader();
-            reader.onload = function () {
-                document.getElementById('RequirementsText').value = reader.result;
-                document.getElementById('reqFileName').textContent = f.name;
-            };
-            reader.readAsText(f);
-        });
-    </script>
 </body>
 </html>

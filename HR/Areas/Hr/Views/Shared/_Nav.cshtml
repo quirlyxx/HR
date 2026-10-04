@@ -1,0 +1,10 @@
+@{
+    var active = ViewData["Active"] as string ?? "";
+}
+<nav class="site-nav">
+    <a class="brand" href="/Hr">HR&nbsp;Board&nbsp;·&nbsp;HR</a>
+    <div class="links">
+        <a class="nav-link @(active == "vacancy" ? "active" : "")" href="/Hr/Vacancies">Вакансії</a>
+        <a class="nav-link @(active == "resumes" ? "active" : "")" href="/Hr/Resumes">Резюме кандидатів</a>
+    </div>
+</nav>

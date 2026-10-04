@@ -1,11 +1,10 @@
-﻿@model List<ResumeInfo>
+@model HR.Models.AnalyticsViewModel
 @{
-    ViewData["Title"] = "Резюме кандидатів";
+    ViewData["Title"] = "HR Analytics";
     Layout = null;
-
-    // Захист від null: навіть якщо щось піде не так вище по ланцюгу,
-    // сторінка не впаде, а просто покаже порожній список.
-    var resumes = Model ?? new List<ResumeInfo>();
+    var m = Model;
+    var maxSkill = m.TopSkills.Count > 0 ? m.TopSkills.Max(x => x.Value) : 1;
+    string Lvl(int p) => p >= 70 ? "high" : p >= 40 ? "mid" : "low";
 }
 
 <!DOCTYPE html>
@@ -548,152 +547,114 @@
                 text-align: center;
             }
         }
+    
+        .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 6px 0 20px; }
+        .kpi { background: #F4EEDD; border: 1px solid var(--paper-edge); border-radius: 6px; padding: 14px 16px; }
+        .kpi b { display: block; font-size: 1.9rem; line-height: 1.1; }
+        .kpi span { color: var(--muted); font-size: 0.82rem; }
+        .charts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 26px; }
+        .chart { border: 1px solid var(--paper-edge); border-radius: 6px; padding: 14px 16px; }
+        .chart h3 { margin: 0 0 12px; font-size: 0.95rem; }
+        .bar-row { display: grid; grid-template-columns: 100px 1fr 26px; gap: 8px; align-items: center; font-size: 0.82rem; margin-bottom: 8px; }
+        .bar-row .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .track { background: var(--paper-edge); height: 10px; border-radius: 999px; overflow: hidden; }
+        .fill { display: block; height: 100%; border-radius: 999px; background: var(--clip-dark); }
+        .fill.ok { background: var(--ok); } .fill.mid { background: #B8860B; } .fill.low { background: var(--danger); }
+        .no-data { color: var(--muted); font-size: 0.85rem; }
+        .table-wrap { overflow-x: auto; }
+        table.cand { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        table.cand th { text-align: left; color: var(--muted); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; padding: 8px 10px; border-bottom: 2px solid var(--paper-edge); }
+        table.cand td { padding: 12px 10px; border-bottom: 1px solid var(--paper-edge); vertical-align: middle; }
+        .sub { color: var(--muted); font-size: 0.8rem; }
+        .status-wait { background: #F4EEDD; color: var(--muted); border: 1px solid var(--paper-edge); padding: 4px 12px; border-radius: 999px; font-size: 0.8rem; white-space: nowrap; }
+        .btn-detail { display: inline-block; text-decoration: none; background: var(--text); color: var(--paper); padding: 7px 14px; border-radius: 6px; font-size: 0.82rem; font-weight: 500; white-space: nowrap; }
+        .btn-detail:hover { background: #000; }
+        .back { display: inline-block; margin-bottom: 14px; color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+        .score { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin: 4px 0 18px; }
+        .big-pct { font-size: 3rem; font-weight: 600; line-height: 1; }
+        .big-pct.high { color: var(--ok); } .big-pct.mid { color: #B8860B; } .big-pct.low { color: var(--danger); }
+        .score .track { flex: 1; min-width: 180px; height: 12px; }
+        .sec { margin-top: 18px; } .sec .lbl { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; margin-bottom: 6px; }
+        @@media (max-width: 860px) { .kpis { grid-template-columns: 1fr 1fr; } .charts { grid-template-columns: 1fr; } }
     </style>
 </head>
 
 <body>
-
-    @{ ViewData["Active"] = "resumes"; }
+    @{ ViewData["Active"] = "analytics"; }
     @await Html.PartialAsync("_TopNav")
-
-    <div class="page">
-
-    <div class="board">
-
-        <div class="clip"></div>
-
-        <div class="paper">
-
-            @if (TempData["ResumeMessage"] != null)
-            {
-                <div class="banner ok">
-                    ✅ @TempData["ResumeMessage"]
-                </div>
-            }
-
-            @if (TempData["ResumeError"] != null)
-            {
-                <div class="banner err">
-                    ⚠️ @TempData["ResumeError"]
-                </div>
-            }
-
-            <div class="page-head">
-                <div>
-                    <h1>Резюме кандидатів</h1>
-                    <p class="lede">
-                        Усі резюме, надіслані через форму кандидата.
-                        Файли зберігаються в Amazon S3.
-                    </p>
-                </div>
-
-                @if (resumes.Count > 0)
-                {
-                    <span class="count-pill">
-                        Усього: @resumes.Count
-                    </span>
-                }
+    <div class="page"><div class="board"><div class="clip"></div><div class="paper">
+        @if (TempData["AnalyticsError"] != null) { <div class="banner err">⚠️ @TempData["AnalyticsError"]</div> }
+        <div class="page-head">
+            <div>
+                <h1>HR Analytics</h1>
+                <p class="lede">Результати аналізу кандидатів від Gemini: статистика, відповідність вакансії та навички.</p>
             </div>
-
-            @if (resumes.Count == 0)
-            {
-                <div class="empty-state">
-                    <div class="icon">🗂️</div>
-                    <p>
-                        Поки що жодного резюме не надіслано.<br />
-                        Як тільки кандидат заповнить форму, воно з'явиться тут.
-                    </p>
-                </div>
-            }
-            else
-            {
-                <div class="resume-list">
-                    @foreach (var resume in resumes)
-                    {
-                        <div class="resume-card">
-
-                            <div class="resume-info">
-                                <span class="resume-name">@resume.CandidateName</span>
-                                <span class="resume-meta">
-                                    @resume.ContactInfo
-                                    <span class="sep">•</span>
-                                    <span class="file-name">📄 @resume.OriginalFileName</span>
-                                    <span class="sep">•</span>
-                                    @resume.UploadedAtUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
-                                </span>
-                            </div>
-
-                            <div class="resume-actions">
-                                <a class="btn-open"
-                                   asp-controller="Resumes"
-                                   asp-action="Open"
-                                   asp-route-key="@resume.Key"
-                                   target="_blank"
-                                   rel="noopener">
-                                    Відкрити
-                                </a>
-
-                                <form asp-controller="Resumes"
-                                      asp-action="Delete"
-                                      method="post"
-                                      onsubmit="return confirm('Видалити резюме цього кандидата?');">
-                                    <input type="hidden" name="key" value="@resume.Key" />
-                                    <button type="submit" class="btn-delete">
-                                        Видалити
-                                    </button>
-                                </form>
-                            </div>
-
-                            <div class="resume-analysis">
-                                @if (resume.Analysis != null)
-                                {
-                                    var pct = resume.Analysis.MatchPercentage;
-
-                                    <div class="analysis-head">
-                                        @if (pct != null)
-                                        {
-                                            <span class="match-pill @(pct >= 70 ? "high" : pct >= 40 ? "mid" : "low")">
-                                                Відповідність вакансії: @(pct)%
-                                            </span>
-                                        }
-
-                                        @if (!string.IsNullOrWhiteSpace(resume.Analysis.Experience))
-                                        {
-                                            <span class="analysis-exp">Досвід: @resume.Analysis.Experience</span>
-                                        }
-                                    </div>
-
-                                    @if (resume.Analysis.Skills.Count > 0)
-                                    {
-                                        <div class="skill-list">
-                                            @foreach (var skill in resume.Analysis.Skills)
-                                            {
-                                                <span class="skill">@skill</span>
-                                            }
-                                        </div>
-                                    }
-
-                                    @if (!string.IsNullOrWhiteSpace(resume.Analysis.Description))
-                                    {
-                                        <p class="analysis-text">@resume.Analysis.Description</p>
-                                    }
-                                }
-                                else
-                                {
-                                    <span class="analysis-pending">⏳ Аналіз ще обробляється…</span>
-                                }
-                            </div>
-
-                        </div>
-                    }
-                </div>
-            }
-
+            <span class="count-pill">Усього: @m.Total</span>
         </div>
 
-    </div>
+        @if (m.Total == 0)
+        {
+            <div class="empty-state"><div class="icon">📊</div><p>Поки що немає кандидатів для аналізу.</p></div>
+        }
+        else
+        {
+            <div class="kpis">
+                <div class="kpi"><b>@m.Total</b><span>Усього кандидатів</span></div>
+                <div class="kpi"><b>@m.Analyzed</b><span>Проаналізовано</span></div>
+                <div class="kpi"><b>@m.Pending</b><span>Очікують аналізу</span></div>
+                <div class="kpi"><b>@(m.AverageMatch != null ? m.AverageMatch + "%" : "—")</b><span>Середня відповідність</span></div>
+            </div>
 
-    </div>
+            <div class="charts">
+                <div class="chart">
+                    <h3>Кількість кандидатів</h3>
+                    <div class="bar-row"><span class="lbl">Проаналізовано</span><span class="track"><i class="fill ok" style="width:@(m.Analyzed * 100 / m.Total)%"></i></span><b>@m.Analyzed</b></div>
+                    <div class="bar-row"><span class="lbl">Очікують</span><span class="track"><i class="fill" style="width:@(m.Pending * 100 / m.Total)%"></i></span><b>@m.Pending</b></div>
+                </div>
+                <div class="chart">
+                    <h3>Відповідність вакансії</h3>
+                    @if (m.Analyzed == 0) { <div class="no-data">Даних поки немає.</div> }
+                    else
+                    {
+                        <div class="bar-row"><span class="lbl">Висока 70–100%</span><span class="track"><i class="fill ok" style="width:@(m.High * 100 / m.Analyzed)%"></i></span><b>@m.High</b></div>
+                        <div class="bar-row"><span class="lbl">Середня 40–69%</span><span class="track"><i class="fill mid" style="width:@(m.Mid * 100 / m.Analyzed)%"></i></span><b>@m.Mid</b></div>
+                        <div class="bar-row"><span class="lbl">Низька 0–39%</span><span class="track"><i class="fill low" style="width:@(m.Low * 100 / m.Analyzed)%"></i></span><b>@m.Low</b></div>
+                    }
+                </div>
+                <div class="chart">
+                    <h3>Найчастіші навички</h3>
+                    @if (m.TopSkills.Count == 0) { <div class="no-data">Даних поки немає.</div> }
+                    @foreach (var sk in m.TopSkills)
+                    {
+                        <div class="bar-row"><span class="lbl" title="@sk.Key">@sk.Key</span><span class="track"><i class="fill" style="width:@(sk.Value * 100 / maxSkill)%"></i></span><b>@sk.Value</b></div>
+                    }
+                </div>
+            </div>
 
+            <div class="table-wrap">
+                <table class="cand">
+                    <thead><tr><th>Кандидат</th><th>Відповідність</th><th>Досвід</th><th>Навички</th><th>Надіслано</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var c in m.Candidates)
+                    {
+                        var a = c.Analysis;
+                        <tr>
+                            <td><b>@(string.IsNullOrWhiteSpace(c.CandidateName) ? "—" : c.CandidateName)</b><div class="sub">@c.ContactInfo</div></td>
+                            <td>
+                                @if (a == null) { <span class="status-wait">⏳ Очікує аналізу</span> }
+                                else if (a.MatchPercentage != null) { <span class="match-pill @Lvl(a.MatchPercentage.Value)">@(a.MatchPercentage)%</span> }
+                                else { <span>—</span> }
+                            </td>
+                            <td>@(a == null || string.IsNullOrWhiteSpace(a.Experience) ? "—" : a.Experience)</td>
+                            <td>@if (a != null) { <div class="skill-list" style="margin:0">@foreach (var sk in a.Skills.Take(3)) { <span class="skill">@sk</span> }</div> }</td>
+                            <td class="sub">@c.UploadedAtUtc.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</td>
+                            <td><a class="btn-detail" asp-controller="HrAnalytics" asp-action="Details" asp-route-key="@c.Key">Переглянути детальніше</a></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div></div></div>
 </body>
 </html>

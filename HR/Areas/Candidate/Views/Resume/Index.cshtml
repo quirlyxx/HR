@@ -449,7 +449,7 @@
 <body>
 
     @{ ViewData["Active"] = "candidate"; }
-    @await Html.PartialAsync("_TopNav")
+    @await Html.PartialAsync("_Nav")
 
     <div class="page">
 
@@ -477,10 +477,11 @@
 
             <p class="lede">
                 Вкажіть ваше ім'я, контактні дані та прикріпіть резюме
-                у форматі PDF або TXT — ми розглянемо його якнайшвидше.
+                у форматі PDF — ми розглянемо його якнайшвидше.
             </p>
 
-            <form asp-controller="Candidate"
+            <form asp-area="Candidate"
+                  asp-controller="Resume"
                   asp-action="Upload"
                   method="post"
                   enctype="multipart/form-data"
@@ -526,11 +527,11 @@
                     <input type="file"
                            name="ResumeFile"
                            id="ResumeFile"
-                           accept=".pdf,.txt,application/pdf,text/plain"
+                           accept=".pdf,application/pdf"
                            required />
 
                     <span class="file-hint">
-                        PDF або TXT, до 10 МБ
+                        Тільки PDF, до 10 МБ
                     </span>
                 </div>
 
